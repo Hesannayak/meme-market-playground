@@ -26,7 +26,7 @@ type Ctx = TradingState & {
   setTakeProfit: (id: string, price: number | null) => void;
 };
 
-const STORAGE_KEY = "memetrade-trading";
+const STORAGE_KEY = "oton-trading";
 
 function load(): TradingState | null {
   try {
@@ -52,13 +52,13 @@ export function TradingProvider({ children }: { children: ReactNode }) {
   }, [state]);
 
   const initBalance = useCallback(() => {
-    const existing = load();
-    if (existing) {
-      setState(existing);
-      return;
-    }
-    const bal = Math.round((50 + Math.random() * 50) * 100) / 100;
-    setState({ balance: bal, positions: [] });
+    setState((prev) => {
+      if (prev) return prev;
+      const existing = load();
+      if (existing) return existing;
+      const bal = Math.round((50 + Math.random() * 50) * 100) / 100;
+      return { balance: bal, positions: [] };
+    });
   }, []);
 
   const clearBalance = useCallback(() => {
