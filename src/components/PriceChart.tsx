@@ -9,7 +9,12 @@ const RANGES = [
 ];
 
 function cssVar(name: string) {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  // lightweight-charts can't parse oklch; resolve to rgb via canvas
+  const ctx = document.createElement("canvas").getContext("2d")!;
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  ctx.fillRect(0, 0, 1, 1);
+  const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
+  return `rgb(${r},${g},${b})`;
 }
 
 export function PriceChart({ coin }: { coin: Coin }) {

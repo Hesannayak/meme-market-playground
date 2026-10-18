@@ -60,7 +60,7 @@ export type Candle = { time: number; open: number; high: number; low: number; cl
 
 export async function fetchCandles(coin: Coin, interval: string, lookbackMs: number): Promise<Candle[]> {
   const rows = await post({ type: "candleSnapshot", req: { coin: coin.hl, interval, startTime: Date.now() - lookbackMs } });
-  return rows.map((r: Record<string, string | number>) => ({
+  return rows.map((r: { t: number; o: string; h: string; l: string; c: string }) => ({
     time: Math.floor(+r.t / 1000),
     open: +r.o * coin.mult, high: +r.h * coin.mult, low: +r.l * coin.mult, close: +r.c * coin.mult,
   }));

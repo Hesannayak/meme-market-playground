@@ -25,7 +25,7 @@ export const Route = createFileRoute("/trade/$pair")({
       <p>market not found_</p><Link to="/" className="text-primary">← back</Link>
     </main>
   ),
-  errorComponent: ({ error }) => <div className="p-6 font-mono">{error.message}</div>,
+  errorComponent: ({ error }) => <div className="p-6 font-mono">{String(error)}</div>,
 });
 
 function PairPage() {
