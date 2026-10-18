@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTrading } from "@/lib/trading";
 
 type Kind = "evm" | "solana";
 type Conn = { kind: Kind; address: string };
@@ -16,17 +17,23 @@ export function WalletButton() {
   const [open, setOpen] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const trading = useTrading();
 
-  // restore previous session silently
   useEffect(() => {
     const saved = localStorage.getItem(KEY) as Kind | null;
     if (saved === "evm" && w().ethereum) {
       w().ethereum!.request({ method: "eth_accounts" }).then((a) => {
         const acc = (a as string[])[0];
-        if (acc) setConn({ kind: "evm", address: acc });
+        if (acc) {
+          setConn({ kind: "evm", address: acc });
+          trading.initBalance();
+        }
       }).catch(() => {});
     } else if (saved === "solana" && sol()) {
-      sol()!.connect({ onlyIfTrusted: true }).then((r) => setConn({ kind: "solana", address: r.publicKey.toString() })).catch(() => {});
+      sol()!.connect({ onlyIfTrusted: true }).then((r) => {
+        setConn({ kind: "solana", address: r.publicKey.toString() });
+        trading.initBalance();
+      }).catch(() => {});
     }
     w().ethereum?.on?.("accountsChanged", (a) => setConn((c) => (c?.kind === "evm" ? (a[0] ? { kind: "evm", address: a[0] } : null) : c)));
   }, []);
@@ -52,6 +59,7 @@ export function WalletButton() {
         setConn({ kind, address: r.publicKey.toString() });
       }
       localStorage.setItem(KEY, kind);
+      trading.initBalance();
       setOpen(false);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Connection rejected");
@@ -62,18 +70,25 @@ export function WalletButton() {
     if (conn?.kind === "solana") await sol()?.disconnect().catch(() => {});
     if (conn?.kind === "evm") await w().ethereum?.request({ method: "wallet_revokePermissions", params: [{ eth_accounts: {} }] }).catch(() => {});
     localStorage.removeItem(KEY);
+    trading.clearBalance();
     setConn(null);
     setOpen(false);
   };
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className="relative flex items-center gap-3">
+      {conn && trading.connected && (
+        <div className="text-xs tabular-nums">
+          <span className="text-muted-foreground">USDC</span>{" "}
+          <span className="text-primary font-bold">${trading.balance.toFixed(2)}</span>
+        </div>
+      )}
       <button onClick={() => setOpen((o) => !o)}
         className={conn ? "border border-primary px-4 py-2 text-xs text-primary" : "bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:opacity-90"}>
         {conn ? `● ${short(conn.address)}` : "connect wallet"}
       </button>
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-64 border border-border bg-card p-2 text-sm shadow-lg">
+        <div className="absolute right-0 z-50 mt-2 w-64 border border-border bg-card p-2 text-sm shadow-lg" style={{ top: "100%" }}>
           {conn ? (
             <>
               <div className="px-3 py-2 text-xs text-muted-foreground">{conn.kind === "evm" ? "EVM" : "Solana"} wallet</div>

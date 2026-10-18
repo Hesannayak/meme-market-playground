@@ -5,10 +5,10 @@ import { COINS, compact, fmt, useMarkets } from "@/lib/coins";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "memetrade_ — paper trade large cap memecoins" },
-      { name: "description", content: "Paper trade Fartcoin, WIF, BONK and more with 1000x leverage and zero market impact." },
-      { property: "og:title", content: "memetrade_ — paper trade memecoins" },
-      { property: "og:description", content: "1000x leverage on Fartcoin, WIF, BONK. Zero risk, zero market impact." },
+      { title: "memetrade_ — trade large cap memecoins" },
+      { name: "description", content: "Trade Fartcoin, WIF, BONK and more with 1000x leverage and zero market impact." },
+      { property: "og:title", content: "memetrade_ — trade memecoins" },
+      { property: "og:description", content: "1000x leverage on Fartcoin, WIF, BONK. Zero market impact." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -43,7 +43,7 @@ function Index() {
           <li><span className="text-primary">1000x</span> leverage</li>
           <li><span className="text-primary">0</span> market impact</li>
           <li><span className="text-primary">100%</span> degen approved</li>
-          <li className="text-muted-foreground">fartcoin · wif · bonk — live prices, paper money</li>
+          <li className="text-muted-foreground">fartcoin · wif · bonk — live prices, real charts</li>
         </ul>
         <Link to="/trade/$pair" params={{ pair: "fartcoin" }}
           className="mt-10 inline-block bg-primary px-6 py-3 font-bold text-primary-foreground hover:opacity-90">
@@ -72,7 +72,7 @@ function Index() {
       </section>
 
       <footer className="mt-16 border-t border-border px-6 py-8 text-center text-xs text-muted-foreground">
-        paper trading only · not financial advice · live data from Hyperliquid
+        not financial advice · live data from Hyperliquid
       </footer>
     </main>
   );

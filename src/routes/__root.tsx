@@ -12,6 +12,7 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { TradingProvider } from "../lib/trading";
 
 function NotFoundComponent() {
   return (
@@ -79,10 +80,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "memetrade_" },
-      { name: "description", content: "Paper trade memecoins" },
+      { name: "description", content: "Trade memecoins with leverage" },
       { name: "author", content: "Lovable" },
       { property: "og:title", content: "memetrade_" },
-      { property: "og:description", content: "Paper trade memecoins" },
+      { property: "og:description", content: "Trade memecoins with leverage" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:site", content: "@Lovable" },
@@ -121,8 +122,10 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
+      <TradingProvider>
+        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+        <Outlet />
+      </TradingProvider>
     </QueryClientProvider>
   );
 }
