@@ -1,5 +1,6 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useState } from "react";
+import { WalletButton } from "@/components/WalletButton";
 import { PriceChart } from "@/components/PriceChart";
 import { COINS, compact, fmt, getCoin, useMarkets } from "@/lib/coins";
 
@@ -41,12 +42,13 @@ function PairPage() {
     <main className="min-h-screen bg-background font-mono text-foreground">
       <nav className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5 text-sm">
         <Link to="/" className="font-bold">memetrade<span className="text-primary">_</span></Link>
-        <div className="flex gap-4 overflow-x-auto text-xs">
+        <div className="mx-6 flex flex-1 justify-end gap-4 overflow-x-auto text-xs">
           {COINS.map((c) => (
             <Link key={c.slug} to="/trade/$pair" params={{ pair: c.slug }}
               className={c.slug === slug ? "text-primary" : "text-muted-foreground hover:text-foreground"}>{c.sym}</Link>
           ))}
         </div>
+        <WalletButton />
       </nav>
 
       <div className="mx-auto max-w-7xl px-6 pb-16">
