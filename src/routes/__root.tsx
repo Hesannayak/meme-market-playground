@@ -12,6 +12,7 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { TradingProvider } from "../lib/trading";
 
 function NotFoundComponent() {
   return (
@@ -78,11 +79,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "memetrade_" },
-      { name: "description", content: "Paper trade memecoins" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "memetrade_" },
-      { property: "og:description", content: "Paper trade memecoins" },
+      { title: "Oton trades" },
+      { name: "description", content: "Trade memecoins with leverage" },
+      { name: "author", content: "Oton trades" },
+      { property: "og:title", content: "Oton trades" },
+      { property: "og:description", content: "Trade memecoins with leverage" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:site", content: "@Lovable" },
@@ -93,6 +94,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         href: appCss,
       },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "apple-touch-icon", href: "/logo-192.png" },
       { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap" },
     ],
   }),
@@ -121,8 +123,10 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
+      <TradingProvider>
+        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+        <Outlet />
+      </TradingProvider>
     </QueryClientProvider>
   );
 }

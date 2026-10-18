@@ -1,8 +1,9 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { WalletButton } from "@/components/WalletButton";
 import { PriceChart } from "@/components/PriceChart";
 import { COINS, compact, fmt, getCoin, useMarkets } from "@/lib/coins";
+import { useTrading, calcPnl, isLiquidated, isTakeProfitHit, type Position } from "@/lib/trading";
 
 export const Route = createFileRoute("/trade/$pair")({
   loader: ({ params }) => {
@@ -12,8 +13,8 @@ export const Route = createFileRoute("/trade/$pair")({
   },
   head: ({ loaderData }) => {
     const c = loaderData ? getCoin(loaderData.slug) : undefined;
-    const t = c ? `${c.sym}-PERP live chart — memetrade_` : "Market not found — memetrade_";
-    const d = c ? `Paper trade ${c.name} (${c.sym}) with up to 1000x leverage. Live price chart and market stats.` : "This market does not exist.";
+    const t = c ? `${c.sym}-PERP live chart — Oton trades` : "Market not found — Oton trades";
+    const d = c ? `Trade ${c.name} (${c.sym}) with up to 1000x leverage. Live price chart and market stats.` : "This market does not exist.";
     return { meta: [
       { title: t }, { name: "description", content: d },
       { property: "og:title", content: t }, { property: "og:description", content: d },
@@ -23,11 +24,19 @@ export const Route = createFileRoute("/trade/$pair")({
   component: PairPage,
   notFoundComponent: () => (
     <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background font-mono text-foreground">
-      <p>market not found_</p><Link to="/" className="text-primary">← back</Link>
+      <p>market not found</p><Link to="/" className="text-primary">← back</Link>
     </main>
   ),
   errorComponent: ({ error }) => <div className="p-6 font-mono">{String(error)}</div>,
 });
+
+function XIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor" width="16" height="16">
+      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+    </svg>
+  );
+}
 
 function PairPage() {
   const { slug } = Route.useLoaderData();
@@ -36,19 +45,30 @@ function PairPage() {
   const s = markets[slug];
   const ch = s ? ((s.price - s.prev) / s.prev) * 100 : 0;
   const [lev, setLev] = useState(100);
-  const [size, setSize] = useState(1000);
+  const [size, setSize] = useState(10);
+  const trading = useTrading();
+
+  const coinPositions = trading.positions.filter((p) => p.coin === slug);
 
   return (
     <main className="min-h-screen bg-background font-mono text-foreground">
       <nav className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5 text-sm">
-        <Link to="/" className="font-bold">memetrade<span className="text-primary">_</span></Link>
+        <Link to="/" className="flex items-center gap-2 font-bold">
+          <img src="/logo.png" alt="Oton" className="h-7 w-7" />
+          <span>Oton<span className="text-primary"> trades</span></span>
+        </Link>
         <div className="mx-6 flex flex-1 justify-end gap-4 overflow-x-auto text-xs">
           {COINS.map((c) => (
             <Link key={c.slug} to="/trade/$pair" params={{ pair: c.slug }}
-              className={c.slug === slug ? "text-primary" : "text-muted-foreground hover:text-foreground"}>{c.sym}</Link>
+              className={`cursor-pointer ${c.slug === slug ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}>{c.sym}</Link>
           ))}
         </div>
-        <WalletButton />
+        <div className="flex items-center gap-4">
+          <a href="https://x.com" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground cursor-pointer">
+            <XIcon />
+          </a>
+          <WalletButton />
+        </div>
       </nav>
 
       <div className="mx-auto max-w-7xl px-6 pb-16">
@@ -67,28 +87,190 @@ function PairPage() {
         <div className="mt-6 grid gap-px border border-border bg-border lg:grid-cols-[1fr_320px]">
           <div className="bg-card p-4"><PriceChart coin={coin} /></div>
           <div className="space-y-5 bg-card p-6 text-sm">
-            <div>
-              <div className="mb-2 text-muted-foreground">size (paper usd)</div>
-              <input type="number" value={size} min={1} onChange={(e) => setSize(Math.max(0, +e.target.value))}
-                className="w-full border border-border bg-background px-3 py-2" />
-            </div>
-            <div>
-              <div className="mb-2 flex justify-between text-muted-foreground"><span>leverage</span><span className="text-primary">{lev}x</span></div>
-              <input type="range" min={1} max={1000} value={lev} onChange={(e) => setLev(+e.target.value)} className="w-full accent-[var(--primary)]" />
-            </div>
-            <Row k="notional" v={`$${(size * lev).toLocaleString()}`} />
-            <Row k="qty" v={s ? `${((size * lev) / s.price).toLocaleString(undefined, { maximumFractionDigits: 0 })} ${coin.sym}` : "—"} />
-            <Row k="liq. long" v={s ? `$${fmt(s.price * (1 - 1 / lev))}` : "—"} />
-            <Row k="liq. short" v={s ? `$${fmt(s.price * (1 + 1 / lev))}` : "—"} />
-            <div className="grid grid-cols-2 gap-2 pt-2">
-              <button className="bg-up py-3 font-bold text-background">long</button>
-              <button className="bg-down py-3 font-bold text-background">short</button>
-            </div>
-            <p className="text-xs text-muted-foreground">live data from Hyperliquid · paper trading only</p>
+            {coinPositions.length === 0 ? (
+              <OrderPanel coin={coin} slug={slug} price={s?.price} lev={lev} setLev={setLev} size={size} setSize={setSize} />
+            ) : (
+              <PositionPanel positions={coinPositions} price={s?.price} coin={coin} />
+            )}
           </div>
         </div>
       </div>
     </main>
+  );
+}
+
+function OrderPanel({ coin, slug, price, lev, setLev, size, setSize }: {
+  coin: { sym: string; slug: string };
+  slug: string;
+  price?: number;
+  lev: number;
+  setLev: (v: number) => void;
+  size: number;
+  setSize: (v: number) => void;
+}) {
+  const trading = useTrading();
+  const [err, setErr] = useState<string | null>(null);
+
+  const open = (side: "long" | "short") => {
+    if (!price) return;
+    if (!trading.connected) trading.initBalance();
+    if (size <= 0) { setErr("enter a valid size"); return; }
+    if (size > trading.balance && trading.connected) { setErr("insufficient balance"); return; }
+
+    const liqPrice = side === "long"
+      ? price * (1 - 1 / lev)
+      : price * (1 + 1 / lev);
+
+    setTimeout(() => {
+      const ok = trading.openPosition({
+        coin: slug,
+        side,
+        entryPrice: price,
+        size,
+        leverage: lev,
+        liqPrice,
+        takeProfit: null,
+      });
+      if (!ok) setErr("insufficient balance");
+      else setErr(null);
+    }, trading.connected ? 0 : 50);
+  };
+
+  return (
+    <>
+      <div>
+        <div className="mb-2 text-muted-foreground">size (usd)</div>
+        <input type="number" value={size} min={1} onChange={(e) => { setSize(Math.max(0, +e.target.value)); setErr(null); }}
+          className="w-full border border-border bg-background px-3 py-2 cursor-text" />
+      </div>
+      <div>
+        <div className="mb-2 flex justify-between text-muted-foreground"><span>leverage</span><span className="text-primary">{lev}x</span></div>
+        <input type="range" min={1} max={1000} value={lev} onChange={(e) => setLev(+e.target.value)} className="w-full accent-[var(--primary)] cursor-pointer" />
+      </div>
+      <Row k="notional" v={`$${(size * lev).toLocaleString()}`} />
+      <Row k="qty" v={price ? `${((size * lev) / price).toLocaleString(undefined, { maximumFractionDigits: 0 })} ${coin.sym}` : "—"} />
+      <Row k="liq. long" v={price ? `$${fmt(price * (1 - 1 / lev))}` : "—"} />
+      <Row k="liq. short" v={price ? `$${fmt(price * (1 + 1 / lev))}` : "—"} />
+      <div className="grid grid-cols-2 gap-2 pt-2">
+        <button onClick={() => open("long")} className="cursor-pointer bg-up py-3 font-bold text-background hover:opacity-90 active:opacity-75">long</button>
+        <button onClick={() => open("short")} className="cursor-pointer bg-down py-3 font-bold text-background hover:opacity-90 active:opacity-75">short</button>
+      </div>
+      {err && <p className="text-xs text-down">{err}</p>}
+      {trading.connected && <p className="text-xs text-muted-foreground">balance: ${trading.balance.toFixed(2)} USDC</p>}
+      <p className="text-xs text-muted-foreground">live data from Hyperliquid</p>
+    </>
+  );
+}
+
+function PositionPanel({ positions, price, coin }: { positions: Position[]; price?: number; coin: { sym: string } }) {
+  const trading = useTrading();
+  const [tpInputs, setTpInputs] = useState<Record<string, string>>({});
+  const [, tick] = useState(0);
+
+  useEffect(() => {
+    const id = setInterval(() => tick((t) => t + 1), 500);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (!price) return;
+    for (const pos of positions) {
+      if (isLiquidated(pos, price)) {
+        trading.closePosition(pos.id, -pos.size);
+        return;
+      }
+      if (isTakeProfitHit(pos, price)) {
+        const pnl = calcPnl(pos, price);
+        trading.closePosition(pos.id, pnl);
+        return;
+      }
+    }
+  }, [price, positions, trading]);
+
+  return (
+    <>
+      <div className="text-xs font-bold text-primary uppercase tracking-wider">open positions</div>
+      {positions.map((pos) => {
+        const pnl = price ? calcPnl(pos, price) : 0;
+        const pnlPct = price ? (pnl / pos.size) * 100 : 0;
+        const isUp = pnl >= 0;
+
+        return (
+          <div key={pos.id} className="space-y-3 border border-border p-3">
+            <div className="flex items-center justify-between">
+              <span className={`font-bold ${pos.side === "long" ? "text-up" : "text-down"}`}>
+                {pos.side.toUpperCase()} {pos.leverage}x
+              </span>
+              <span className="text-xs text-muted-foreground">{coin.sym}-PERP</span>
+            </div>
+
+            <div className={`text-2xl font-bold tabular-nums ${isUp ? "text-up" : "text-down"}`}>
+              {isUp ? "+" : ""}{pnl.toFixed(2)} USDC
+            </div>
+            <div className={`text-xs tabular-nums ${isUp ? "text-up" : "text-down"}`}>
+              {isUp ? "+" : ""}{pnlPct.toFixed(2)}%
+            </div>
+
+            <Row k="entry" v={`$${fmt(pos.entryPrice)}`} />
+            <Row k="mark" v={price ? `$${fmt(price)}` : "—"} />
+            <Row k="margin" v={`$${pos.size.toFixed(2)}`} />
+            <Row k="liquidation" v={`$${fmt(pos.liqPrice)}`} />
+
+            <div>
+              <div className="mb-1 text-xs text-muted-foreground">take profit</div>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  placeholder={pos.takeProfit ? `$${pos.takeProfit}` : "set price"}
+                  value={tpInputs[pos.id] ?? ""}
+                  onChange={(e) => setTpInputs((p) => ({ ...p, [pos.id]: e.target.value }))}
+                  className="flex-1 border border-border bg-background px-2 py-1 text-xs cursor-text"
+                />
+                <button
+                  onClick={() => {
+                    const val = parseFloat(tpInputs[pos.id] ?? "");
+                    if (!isNaN(val) && val > 0) {
+                      trading.setTakeProfit(pos.id, val);
+                      setTpInputs((p) => ({ ...p, [pos.id]: "" }));
+                    }
+                  }}
+                  className="cursor-pointer border border-primary px-2 py-1 text-xs text-primary hover:bg-primary hover:text-primary-foreground"
+                >
+                  set
+                </button>
+                {pos.takeProfit && (
+                  <button
+                    onClick={() => trading.setTakeProfit(pos.id, null)}
+                    className="cursor-pointer px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+              {pos.takeProfit && (
+                <div className="mt-1 text-xs text-up">TP @ ${fmt(pos.takeProfit)}</div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button
+                onClick={() => { if (price) trading.closePosition(pos.id, calcPnl(pos, price)); }}
+                className="cursor-pointer border border-border py-2 text-xs hover:bg-background"
+              >
+                close position
+              </button>
+              <button
+                onClick={() => trading.closePosition(pos.id, -pos.size)}
+                className="cursor-pointer border border-down py-2 text-xs text-down hover:bg-down hover:text-background"
+              >
+                market close
+              </button>
+            </div>
+          </div>
+        );
+      })}
+      <p className="text-xs text-muted-foreground">balance: ${trading.balance.toFixed(2)} USDC</p>
+    </>
   );
 }
 
