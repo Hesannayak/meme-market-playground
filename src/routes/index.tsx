@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { WalletButton } from "@/components/WalletButton";
 import { COINS, compact, fmt, useMarkets } from "@/lib/coins";
 
 export const Route = createFileRoute("/")({
@@ -27,9 +28,10 @@ function Index() {
 
       <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5 text-sm">
         <span className="font-bold">memetrade<span className="text-primary">_</span></span>
-        <div className="flex gap-6 text-muted-foreground">
+        <div className="flex items-center gap-6 text-muted-foreground">
           <span>mobile app <span className="text-primary">soon</span></span>
           <Link to="/trade/$pair" params={{ pair: "fartcoin" }} className="hover:text-foreground">trade</Link>
+          <WalletButton />
         </div>
       </nav>
 
