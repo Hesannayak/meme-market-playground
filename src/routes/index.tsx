@@ -59,7 +59,7 @@ function Index() {
   const coins = useLive();
   const [sel, setSel] = useState(0);
   const [lev, setLev] = useState(100);
-  const c = coins[sel];
+  const c = coins[sel] ?? coins[0]!;
   const tape = coins.map((x) => `${x.sym} ${fmt(x.price)}`).join("  ·  ");
 
   return (
