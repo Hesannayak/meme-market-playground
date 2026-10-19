@@ -40,7 +40,7 @@ function Index() {
           <span>Oton<span className="text-primary"> trades</span></span>
         </span>
         <div className="flex items-center gap-6 text-muted-foreground">
-          <a href="https://x.com" target="_blank" rel="noopener noreferrer" className="hover:text-foreground cursor-pointer">
+          <a href="https://x.com/lab100x" target="_blank" rel="noopener noreferrer" className="hover:text-foreground cursor-pointer">
             <XIcon />
           </a>
           <Link to="/trade/$pair" params={{ pair: "fartcoin" }} className="cursor-pointer hover:text-foreground">trade</Link>
