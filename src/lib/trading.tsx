@@ -12,9 +12,16 @@ export type Position = {
   timestamp: number;
 };
 
+export type ClosedPosition = Position & {
+  exitPrice: number;
+  pnl: number;
+  closedAt: number;
+};
+
 type TradingState = {
   balance: number;
   positions: Position[];
+  history: ClosedPosition[];
 };
 
 type Ctx = TradingState & {
@@ -22,7 +29,7 @@ type Ctx = TradingState & {
   initBalance: () => void;
   clearBalance: () => void;
   openPosition: (p: Omit<Position, "id" | "timestamp">) => boolean;
-  closePosition: (id: string, pnl: number) => void;
+  closePosition: (id: string, pnl: number, exitPrice: number) => void;
   setTakeProfit: (id: string, price: number | null) => void;
 };
 
@@ -57,7 +64,7 @@ export function TradingProvider({ children }: { children: ReactNode }) {
       const existing = load();
       if (existing) return existing;
       const bal = Math.round((50 + Math.random() * 50) * 100) / 100;
-      return { balance: bal, positions: [] };
+      return { balance: bal, positions: [], history: [] };
     });
   }, []);
 
@@ -72,6 +79,7 @@ export function TradingProvider({ children }: { children: ReactNode }) {
       if (!prev || prev.balance < p.size) return prev;
       ok = true;
       return {
+        ...prev,
         balance: Math.round((prev.balance - p.size) * 100) / 100,
         positions: [...prev.positions, { ...p, id: crypto.randomUUID(), timestamp: Date.now() }],
       };
@@ -79,15 +87,17 @@ export function TradingProvider({ children }: { children: ReactNode }) {
     return ok;
   }, []);
 
-  const closePosition = useCallback((id: string, pnl: number) => {
+  const closePosition = useCallback((id: string, pnl: number, exitPrice: number) => {
     setState((prev) => {
       if (!prev) return prev;
       const pos = prev.positions.find((p) => p.id === id);
       if (!pos) return prev;
       const returnAmount = Math.max(0, pos.size + pnl);
+      const closed: ClosedPosition = { ...pos, exitPrice, pnl, closedAt: Date.now() };
       return {
         balance: Math.round((prev.balance + returnAmount) * 100) / 100,
         positions: prev.positions.filter((p) => p.id !== id),
+        history: [closed, ...(prev.history ?? [])],
       };
     });
   }, []);
@@ -105,6 +115,7 @@ export function TradingProvider({ children }: { children: ReactNode }) {
   const ctx: Ctx = {
     balance: state?.balance ?? 0,
     positions: state?.positions ?? [],
+    history: state?.history ?? [],
     connected: state !== null,
     initBalance,
     clearBalance,

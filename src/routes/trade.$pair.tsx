@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { WalletButton } from "@/components/WalletButton";
 import { PriceChart } from "@/components/PriceChart";
 import { COINS, compact, fmt, getCoin, useMarkets } from "@/lib/coins";
-import { useTrading, calcPnl, isLiquidated, isTakeProfitHit, type Position } from "@/lib/trading";
+import { useTrading, calcPnl, isLiquidated, isTakeProfitHit, type Position, type ClosedPosition } from "@/lib/trading";
 
 export const Route = createFileRoute("/trade/$pair")({
   loader: ({ params }) => {
@@ -47,8 +47,10 @@ function PairPage() {
   const [lev, setLev] = useState(100);
   const [size, setSize] = useState(10);
   const trading = useTrading();
+  const [bottomTab, setBottomTab] = useState<"positions" | "history">("positions");
 
   const coinPositions = trading.positions.filter((p) => p.coin === slug);
+  const coinHistory = (trading.history ?? []).filter((h) => h.coin === slug);
 
   return (
     <main className="min-h-screen bg-background font-mono text-foreground">
@@ -87,12 +89,30 @@ function PairPage() {
         <div className="mt-6 grid gap-px border border-border bg-border lg:grid-cols-[1fr_320px]">
           <div className="bg-card p-4"><PriceChart coin={coin} /></div>
           <div className="space-y-5 bg-card p-6 text-sm">
-            {coinPositions.length === 0 ? (
-              <OrderPanel coin={coin} slug={slug} price={s?.price} lev={lev} setLev={setLev} size={size} setSize={setSize} />
-            ) : (
-              <PositionPanel positions={coinPositions} price={s?.price} coin={coin} />
-            )}
+            <OrderPanel coin={coin} slug={slug} price={s?.price} lev={lev} setLev={setLev} size={size} setSize={setSize} />
           </div>
+        </div>
+
+        <div className="mt-4 border border-border">
+          <div className="flex border-b border-border text-xs">
+            <button
+              onClick={() => setBottomTab("positions")}
+              className={`cursor-pointer px-5 py-3 font-bold uppercase tracking-wider ${bottomTab === "positions" ? "text-primary border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              positions {coinPositions.length > 0 && <span className="ml-1 text-primary">({coinPositions.length})</span>}
+            </button>
+            <button
+              onClick={() => setBottomTab("history")}
+              className={`cursor-pointer px-5 py-3 font-bold uppercase tracking-wider ${bottomTab === "history" ? "text-primary border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"}`}
+            >
+              history {coinHistory.length > 0 && <span className="ml-1 text-muted-foreground">({coinHistory.length})</span>}
+            </button>
+          </div>
+          {bottomTab === "positions" ? (
+            <PositionsTable positions={coinPositions} price={s?.price} coin={coin} />
+          ) : (
+            <HistoryTable history={coinHistory} coin={coin} />
+          )}
         </div>
       </div>
     </main>
@@ -112,28 +132,25 @@ function OrderPanel({ coin, slug, price, lev, setLev, size, setSize }: {
   const [err, setErr] = useState<string | null>(null);
 
   const open = (side: "long" | "short") => {
-    if (!price) return;
-    if (!trading.connected) trading.initBalance();
+    if (!price || !trading.connected) return;
     if (size <= 0) { setErr("enter a valid size"); return; }
-    if (size > trading.balance && trading.connected) { setErr("insufficient balance"); return; }
+    if (size > trading.balance) { setErr("insufficient balance"); return; }
 
     const liqPrice = side === "long"
       ? price * (1 - 1 / lev)
       : price * (1 + 1 / lev);
 
-    setTimeout(() => {
-      const ok = trading.openPosition({
-        coin: slug,
-        side,
-        entryPrice: price,
-        size,
-        leverage: lev,
-        liqPrice,
-        takeProfit: null,
-      });
-      if (!ok) setErr("insufficient balance");
-      else setErr(null);
-    }, trading.connected ? 0 : 50);
+    const ok = trading.openPosition({
+      coin: slug,
+      side,
+      entryPrice: price,
+      size,
+      leverage: lev,
+      liqPrice,
+      takeProfit: null,
+    });
+    if (!ok) setErr("insufficient balance");
+    else setErr(null);
   };
 
   return (
@@ -152,9 +169,19 @@ function OrderPanel({ coin, slug, price, lev, setLev, size, setSize }: {
       <Row k="liq. long" v={price ? `$${fmt(price * (1 - 1 / lev))}` : "—"} />
       <Row k="liq. short" v={price ? `$${fmt(price * (1 + 1 / lev))}` : "—"} />
       <div className="grid grid-cols-2 gap-2 pt-2">
-        <button onClick={() => open("long")} className="cursor-pointer bg-up py-3 font-bold text-background hover:opacity-90 active:opacity-75">long</button>
-        <button onClick={() => open("short")} className="cursor-pointer bg-down py-3 font-bold text-background hover:opacity-90 active:opacity-75">short</button>
+        {trading.connected ? (
+          <>
+            <button onClick={() => open("long")} className="cursor-pointer bg-up py-3 font-bold text-background hover:opacity-90 active:opacity-75">long</button>
+            <button onClick={() => open("short")} className="cursor-pointer bg-down py-3 font-bold text-background hover:opacity-90 active:opacity-75">short</button>
+          </>
+        ) : (
+          <>
+            <button disabled className="cursor-not-allowed bg-up/30 py-3 font-bold text-background/50">long</button>
+            <button disabled className="cursor-not-allowed bg-down/30 py-3 font-bold text-background/50">short</button>
+          </>
+        )}
       </div>
+      {!trading.connected && <p className="text-xs text-muted-foreground">connect wallet to trade</p>}
       {err && <p className="text-xs text-down">{err}</p>}
       {trading.connected && <p className="text-xs text-muted-foreground">balance: ${trading.balance.toFixed(2)} USDC</p>}
       <p className="text-xs text-muted-foreground">live data from Hyperliquid</p>
@@ -162,9 +189,8 @@ function OrderPanel({ coin, slug, price, lev, setLev, size, setSize }: {
   );
 }
 
-function PositionPanel({ positions, price, coin }: { positions: Position[]; price?: number; coin: { sym: string } }) {
+function PositionsTable({ positions, price, coin }: { positions: Position[]; price?: number; coin: { sym: string } }) {
   const trading = useTrading();
-  const [tpInputs, setTpInputs] = useState<Record<string, string>>({});
   const [, tick] = useState(0);
 
   useEffect(() => {
@@ -176,101 +202,119 @@ function PositionPanel({ positions, price, coin }: { positions: Position[]; pric
     if (!price) return;
     for (const pos of positions) {
       if (isLiquidated(pos, price)) {
-        trading.closePosition(pos.id, -pos.size);
+        trading.closePosition(pos.id, -pos.size, price);
         return;
       }
       if (isTakeProfitHit(pos, price)) {
         const pnl = calcPnl(pos, price);
-        trading.closePosition(pos.id, pnl);
+        trading.closePosition(pos.id, pnl, price);
         return;
       }
     }
   }, [price, positions, trading]);
 
+  if (positions.length === 0) {
+    return <div className="p-8 text-center text-xs text-muted-foreground">no open positions</div>;
+  }
+
   return (
-    <>
-      <div className="text-xs font-bold text-primary uppercase tracking-wider">open positions</div>
-      {positions.map((pos) => {
-        const pnl = price ? calcPnl(pos, price) : 0;
-        const pnlPct = price ? (pnl / pos.size) * 100 : 0;
-        const isUp = pnl >= 0;
-
-        return (
-          <div key={pos.id} className="space-y-3 border border-border p-3">
-            <div className="flex items-center justify-between">
-              <span className={`font-bold ${pos.side === "long" ? "text-up" : "text-down"}`}>
-                {pos.side.toUpperCase()} {pos.leverage}x
-              </span>
-              <span className="text-xs text-muted-foreground">{coin.sym}-PERP</span>
-            </div>
-
-            <div className={`text-2xl font-bold tabular-nums ${isUp ? "text-up" : "text-down"}`}>
-              {isUp ? "+" : ""}{pnl.toFixed(2)} USDC
-            </div>
-            <div className={`text-xs tabular-nums ${isUp ? "text-up" : "text-down"}`}>
-              {isUp ? "+" : ""}{pnlPct.toFixed(2)}%
-            </div>
-
-            <Row k="entry" v={`$${fmt(pos.entryPrice)}`} />
-            <Row k="mark" v={price ? `$${fmt(price)}` : "—"} />
-            <Row k="margin" v={`$${pos.size.toFixed(2)}`} />
-            <Row k="liquidation" v={`$${fmt(pos.liqPrice)}`} />
-
-            <div>
-              <div className="mb-1 text-xs text-muted-foreground">take profit</div>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  placeholder={pos.takeProfit ? `$${pos.takeProfit}` : "set price"}
-                  value={tpInputs[pos.id] ?? ""}
-                  onChange={(e) => setTpInputs((p) => ({ ...p, [pos.id]: e.target.value }))}
-                  className="flex-1 border border-border bg-background px-2 py-1 text-xs cursor-text"
-                />
-                <button
-                  onClick={() => {
-                    const val = parseFloat(tpInputs[pos.id] ?? "");
-                    if (!isNaN(val) && val > 0) {
-                      trading.setTakeProfit(pos.id, val);
-                      setTpInputs((p) => ({ ...p, [pos.id]: "" }));
-                    }
-                  }}
-                  className="cursor-pointer border border-primary px-2 py-1 text-xs text-primary hover:bg-primary hover:text-primary-foreground"
-                >
-                  set
-                </button>
-                {pos.takeProfit && (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="border-b border-border text-left text-muted-foreground">
+            <th className="px-4 py-3 font-normal">asset</th>
+            <th className="px-4 py-3 font-normal">side</th>
+            <th className="px-4 py-3 font-normal">entry</th>
+            <th className="px-4 py-3 font-normal">margin</th>
+            <th className="px-4 py-3 font-normal">lev</th>
+            <th className="px-4 py-3 font-normal">PnL</th>
+            <th className="px-4 py-3 font-normal">% change</th>
+            <th className="px-4 py-3 font-normal"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {positions.map((pos) => {
+            const pnl = price ? calcPnl(pos, price) : 0;
+            const pnlPct = price ? (pnl / pos.size) * 100 : 0;
+            const isUp = pnl >= 0;
+            return (
+              <tr key={pos.id} className="border-b border-border hover:bg-card/50">
+                <td className="px-4 py-3 font-bold">{coin.sym}-PERP</td>
+                <td className={`px-4 py-3 font-bold ${pos.side === "long" ? "text-up" : "text-down"}`}>
+                  {pos.side.toUpperCase()}
+                </td>
+                <td className="px-4 py-3 tabular-nums">${fmt(pos.entryPrice)}</td>
+                <td className="px-4 py-3 tabular-nums">${pos.size.toFixed(2)}</td>
+                <td className="px-4 py-3 tabular-nums">{pos.leverage}x</td>
+                <td className={`px-4 py-3 tabular-nums font-bold ${isUp ? "text-up" : "text-down"}`}>
+                  {isUp ? "+" : ""}{pnl.toFixed(2)}
+                </td>
+                <td className={`px-4 py-3 tabular-nums ${isUp ? "text-up" : "text-down"}`}>
+                  {isUp ? "+" : ""}{pnlPct.toFixed(2)}%
+                </td>
+                <td className="px-4 py-3">
                   <button
-                    onClick={() => trading.setTakeProfit(pos.id, null)}
-                    className="cursor-pointer px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => { if (price) trading.closePosition(pos.id, calcPnl(pos, price), price); }}
+                    className="cursor-pointer border border-down px-3 py-1 text-down hover:bg-down hover:text-background"
                   >
-                    ×
+                    close
                   </button>
-                )}
-              </div>
-              {pos.takeProfit && (
-                <div className="mt-1 text-xs text-up">TP @ ${fmt(pos.takeProfit)}</div>
-              )}
-            </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
-            <div className="grid grid-cols-2 gap-2 pt-1">
-              <button
-                onClick={() => { if (price) trading.closePosition(pos.id, calcPnl(pos, price)); }}
-                className="cursor-pointer border border-border py-2 text-xs hover:bg-background"
-              >
-                close position
-              </button>
-              <button
-                onClick={() => trading.closePosition(pos.id, -pos.size)}
-                className="cursor-pointer border border-down py-2 text-xs text-down hover:bg-down hover:text-background"
-              >
-                market close
-              </button>
-            </div>
-          </div>
-        );
-      })}
-      <p className="text-xs text-muted-foreground">balance: ${trading.balance.toFixed(2)} USDC</p>
-    </>
+function HistoryTable({ history, coin }: { history: ClosedPosition[]; coin: { sym: string } }) {
+  if (history.length === 0) {
+    return <div className="p-8 text-center text-xs text-muted-foreground">no trade history</div>;
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="border-b border-border text-left text-muted-foreground">
+            <th className="px-4 py-3 font-normal">asset</th>
+            <th className="px-4 py-3 font-normal">side</th>
+            <th className="px-4 py-3 font-normal">entry</th>
+            <th className="px-4 py-3 font-normal">exit</th>
+            <th className="px-4 py-3 font-normal">margin</th>
+            <th className="px-4 py-3 font-normal">lev</th>
+            <th className="px-4 py-3 font-normal">PnL</th>
+            <th className="px-4 py-3 font-normal">% change</th>
+          </tr>
+        </thead>
+        <tbody>
+          {history.map((h) => {
+            const pnlPct = (h.pnl / h.size) * 100;
+            const isUp = h.pnl >= 0;
+            return (
+              <tr key={h.id + h.closedAt} className="border-b border-border hover:bg-card/50">
+                <td className="px-4 py-3 font-bold">{coin.sym}-PERP</td>
+                <td className={`px-4 py-3 font-bold ${h.side === "long" ? "text-up" : "text-down"}`}>
+                  {h.side.toUpperCase()}
+                </td>
+                <td className="px-4 py-3 tabular-nums">${fmt(h.entryPrice)}</td>
+                <td className="px-4 py-3 tabular-nums">${fmt(h.exitPrice)}</td>
+                <td className="px-4 py-3 tabular-nums">${h.size.toFixed(2)}</td>
+                <td className="px-4 py-3 tabular-nums">{h.leverage}x</td>
+                <td className={`px-4 py-3 tabular-nums font-bold ${isUp ? "text-up" : "text-down"}`}>
+                  {isUp ? "+" : ""}{h.pnl.toFixed(2)}
+                </td>
+                <td className={`px-4 py-3 tabular-nums ${isUp ? "text-up" : "text-down"}`}>
+                  {isUp ? "+" : ""}{pnlPct.toFixed(2)}%
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
