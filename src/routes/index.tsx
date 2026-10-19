@@ -44,6 +44,7 @@ function Index() {
             <XIcon />
           </a>
           <Link to="/trade/$pair" params={{ pair: "fartcoin" }} className="cursor-pointer hover:text-foreground">trade</Link>
+          <Link to="/docs" className="cursor-pointer hover:text-foreground">docs</Link>
           <WalletButton />
         </div>
       </nav>

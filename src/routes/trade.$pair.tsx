@@ -66,6 +66,7 @@ function PairPage() {
           ))}
         </div>
         <div className="flex items-center gap-4">
+          <Link to="/docs" className="text-muted-foreground hover:text-foreground cursor-pointer">docs</Link>
           <a href="https://x.com" target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground cursor-pointer">
             <XIcon />
           </a>
