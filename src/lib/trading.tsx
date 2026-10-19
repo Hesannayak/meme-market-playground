@@ -26,7 +26,7 @@ type TradingState = {
 
 type Ctx = TradingState & {
   connected: boolean;
-  initBalance: () => void;
+  initBalance: (realBalance: number) => void;
   clearBalance: () => void;
   openPosition: (p: Omit<Position, "id" | "timestamp">) => boolean;
   closePosition: (id: string, pnl: number, exitPrice: number) => void;
@@ -58,13 +58,12 @@ export function TradingProvider({ children }: { children: ReactNode }) {
     if (state) save(state);
   }, [state]);
 
-  const initBalance = useCallback(() => {
+  const initBalance = useCallback((realBalance: number) => {
     setState((prev) => {
       if (prev) return prev;
       const existing = load();
       if (existing) return existing;
-      const bal = Math.round((50 + Math.random() * 50) * 100) / 100;
-      return { balance: bal, positions: [], history: [] };
+      return { balance: Math.round(realBalance * 100) / 100, positions: [], history: [] };
     });
   }, []);
 

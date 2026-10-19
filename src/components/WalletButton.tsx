@@ -12,27 +12,82 @@ const sol = () => w().phantom?.solana ?? w().solana;
 const KEY = "oton-wallet";
 const short = (a: string) => `${a.slice(0, 4)}…${a.slice(-4)}`;
 
+const SOLANA_RPC = "https://api.mainnet-beta.solana.com";
+const USDC_MINT_SOL = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+const USDC_CONTRACT_EVM = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+
+async function fetchSolanaUsdcBalance(address: string): Promise<number> {
+  try {
+    const res = await fetch(SOLANA_RPC, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0", id: 1, method: "getTokenAccountsByOwner",
+        params: [
+          address,
+          { mint: USDC_MINT_SOL },
+          { encoding: "jsonParsed" },
+        ],
+      }),
+    });
+    const data = await res.json();
+    const accounts = data?.result?.value ?? [];
+    let total = 0;
+    for (const acc of accounts) {
+      const info = acc?.account?.data?.parsed?.info;
+      if (info?.tokenAmount?.uiAmount != null) {
+        total += info.tokenAmount.uiAmount;
+      }
+    }
+    return total;
+  } catch {
+    return 0;
+  }
+}
+
+async function fetchEvmUsdcBalance(address: string, ethereum: Eth): Promise<number> {
+  try {
+    const balanceOfSelector = "0x70a08231";
+    const paddedAddress = address.slice(2).toLowerCase().padStart(64, "0");
+    const data = balanceOfSelector + paddedAddress;
+
+    const result = await ethereum.request({
+      method: "eth_call",
+      params: [{ to: USDC_CONTRACT_EVM, data }, "latest"],
+    }) as string;
+
+    const raw = BigInt(result);
+    return Number(raw) / 1e6;
+  } catch {
+    return 0;
+  }
+}
+
 export function WalletButton() {
   const [conn, setConn] = useState<Conn | null>(null);
   const [open, setOpen] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const trading = useTrading();
 
   useEffect(() => {
     const saved = localStorage.getItem(KEY) as Kind | null;
     if (saved === "evm" && w().ethereum) {
-      w().ethereum!.request({ method: "eth_accounts" }).then((a) => {
+      w().ethereum!.request({ method: "eth_accounts" }).then(async (a) => {
         const acc = (a as string[])[0];
         if (acc) {
           setConn({ kind: "evm", address: acc });
-          trading.initBalance();
+          const bal = await fetchEvmUsdcBalance(acc, w().ethereum!);
+          trading.initBalance(bal);
         }
       }).catch(() => {});
     } else if (saved === "solana" && sol()) {
-      sol()!.connect({ onlyIfTrusted: true }).then((r) => {
-        setConn({ kind: "solana", address: r.publicKey.toString() });
-        trading.initBalance();
+      sol()!.connect({ onlyIfTrusted: true }).then(async (r) => {
+        const addr = r.publicKey.toString();
+        setConn({ kind: "solana", address: addr });
+        const bal = await fetchSolanaUsdcBalance(addr);
+        trading.initBalance(bal);
       }).catch(() => {});
     }
     w().ethereum?.on?.("accountsChanged", (a) => setConn((c) => (c?.kind === "evm" ? (a[0] ? { kind: "evm", address: a[0] } : null) : c)));
@@ -46,23 +101,32 @@ export function WalletButton() {
 
   const connect = async (kind: Kind) => {
     setErr(null);
+    setLoading(true);
     try {
+      let address: string;
       if (kind === "evm") {
         const eth = w().ethereum;
         if (!eth) { window.open("https://metamask.io/download/", "_blank"); throw new Error("No EVM wallet found — install MetaMask or Rabby"); }
         const a = (await eth.request({ method: "eth_requestAccounts" })) as string[];
-        setConn({ kind, address: a[0]! });
+        address = a[0]!;
+        setConn({ kind, address });
+        const bal = await fetchEvmUsdcBalance(address, eth);
+        trading.initBalance(bal);
       } else {
         const s = sol();
         if (!s) { window.open("https://phantom.app/download", "_blank"); throw new Error("No Solana wallet found — install Phantom"); }
         const r = await s.connect();
-        setConn({ kind, address: r.publicKey.toString() });
+        address = r.publicKey.toString();
+        setConn({ kind, address });
+        const bal = await fetchSolanaUsdcBalance(address);
+        trading.initBalance(bal);
       }
       localStorage.setItem(KEY, kind);
-      trading.initBalance();
       setOpen(false);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Connection rejected");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -85,7 +149,7 @@ export function WalletButton() {
       )}
       <button onClick={() => setOpen((o) => !o)}
         className={conn ? "cursor-pointer border border-primary px-4 py-2 text-xs text-primary" : "cursor-pointer bg-primary px-4 py-2 text-xs font-bold text-primary-foreground hover:opacity-90"}>
-        {conn ? `● ${short(conn.address)}` : "connect wallet"}
+        {loading ? "connecting…" : conn ? `● ${short(conn.address)}` : "connect wallet"}
       </button>
       {open && (
         <div className="absolute right-0 z-50 mt-2 w-64 border border-border bg-card p-2 text-sm shadow-lg" style={{ top: "100%" }}>
@@ -98,8 +162,8 @@ export function WalletButton() {
             </>
           ) : (
             <>
-              <button onClick={() => connect("solana")} className="cursor-pointer w-full px-3 py-2 text-left hover:bg-background">Phantom <span className="text-xs text-muted-foreground">· solana</span></button>
-              <button onClick={() => connect("evm")} className="cursor-pointer w-full px-3 py-2 text-left hover:bg-background">MetaMask / Rabby <span className="text-xs text-muted-foreground">· evm</span></button>
+              <button onClick={() => connect("solana")} disabled={loading} className="cursor-pointer w-full px-3 py-2 text-left hover:bg-background">Phantom <span className="text-xs text-muted-foreground">· solana</span></button>
+              <button onClick={() => connect("evm")} disabled={loading} className="cursor-pointer w-full px-3 py-2 text-left hover:bg-background">MetaMask / Rabby <span className="text-xs text-muted-foreground">· evm</span></button>
               {err && <p className="px-3 py-2 text-xs text-down">{err}</p>}
             </>
           )}
