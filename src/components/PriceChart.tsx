@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchCandles, type Coin } from "@/lib/coins";
+import type { Position } from "@/lib/trading";
 
 const RANGES = [
+  { label: "1m", interval: "1m", ms: 3600e3 },
   { label: "1D", interval: "15m", ms: 864e5 },
   { label: "1W", interval: "1h", ms: 7 * 864e5 },
   { label: "1M", interval: "4h", ms: 30 * 864e5 },
@@ -9,7 +11,6 @@ const RANGES = [
 ];
 
 function cssVar(name: string) {
-  // lightweight-charts can't parse oklch; resolve to rgb via canvas
   const ctx = document.createElement("canvas").getContext("2d")!;
   ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   ctx.fillRect(0, 0, 1, 1);
@@ -17,9 +18,9 @@ function cssVar(name: string) {
   return `rgb(${r},${g},${b})`;
 }
 
-export function PriceChart({ coin }: { coin: Coin }) {
+export function PriceChart({ coin, positions = [] }: { coin: Coin; positions?: Position[] }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [range, setRange] = useState(RANGES[1]!);
+  const [range, setRange] = useState(RANGES[0]!);
   const [err, setErr] = useState(false);
 
   useEffect(() => {
@@ -41,21 +42,50 @@ export function PriceChart({ coin }: { coin: Coin }) {
         upColor: up, downColor: down, wickUpColor: up, wickDownColor: down, borderVisible: false,
         priceFormat: { type: "price", precision: coin.mult < 1 ? 8 : 5, minMove: coin.mult < 1 ? 1e-8 : 1e-5 },
       });
+
+      const priceLines: ReturnType<typeof series.createPriceLine>[] = [];
+
+      const syncLines = () => {
+        priceLines.forEach((l) => series.removePriceLine(l));
+        priceLines.length = 0;
+
+        for (const pos of positions) {
+          priceLines.push(series.createPriceLine({
+            price: pos.entryPrice,
+            color: pos.side === "long" ? up : down,
+            lineWidth: 1,
+            lineStyle: lc.LineStyle.Solid,
+            axisLabelVisible: true,
+            title: `entry ${pos.side.toUpperCase()} ${pos.leverage}x`,
+          }));
+
+          priceLines.push(series.createPriceLine({
+            price: pos.liqPrice,
+            color: down,
+            lineWidth: 1,
+            lineStyle: lc.LineStyle.Dashed,
+            axisLabelVisible: true,
+            title: `liq`,
+          }));
+        }
+      };
+
       const load = async () => {
         try {
           const c = await fetchCandles(coin, range.interval, range.ms);
           if (disposed) return;
           series.setData(c as never);
+          syncLines();
           setErr(false);
         } catch { setErr(true); }
       };
       await load();
       chart.timeScale().fitContent();
-      const id = setInterval(load, 5000);
+      const id = setInterval(load, range.interval === "1m" ? 3000 : 5000);
       cleanup = () => { clearInterval(id); chart.remove(); };
     })();
     return () => { disposed = true; cleanup(); };
-  }, [coin, range]);
+  }, [coin, range, positions]);
 
   return (
     <div>

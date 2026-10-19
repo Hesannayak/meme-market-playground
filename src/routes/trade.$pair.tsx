@@ -87,7 +87,7 @@ function PairPage() {
         </div>
 
         <div className="mt-6 grid gap-px border border-border bg-border lg:grid-cols-[1fr_320px]">
-          <div className="bg-card p-4"><PriceChart coin={coin} /></div>
+          <div className="bg-card p-4"><PriceChart coin={coin} positions={coinPositions} /></div>
           <div className="space-y-5 bg-card p-6 text-sm">
             <OrderPanel coin={coin} slug={slug} price={s?.price} lev={lev} setLev={setLev} size={size} setSize={setSize} />
           </div>
